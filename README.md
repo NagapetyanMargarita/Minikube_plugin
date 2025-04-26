@@ -15,17 +15,14 @@ git clone https://github.com/NagapetyanMargarita/Minikube_plugin.git
 ```
 minikube start --driver=docker
 ```
-3. Далее необходимо установить необходимые зависимости с использованием Makefile. Запустите:
-```
-eval $(minikube -p minikube docker-env)
-pip install -r requirements.txt
-```
 
-4. Для подключения к нодам и отправки уведомлений в Telegram добавьте собственные значения в .env по шаблону .env_template.
+3. Для подключения к нодам и отправки уведомлений в Telegram добавьте собственные значения в my_vars.env.
 
-5.	Остается только запустить программу. Это можно сдлеать 2-я способами:
-* 5.1. С помощью Makefile. Для этого необходимо перейти в корень проекта, после чего запустить команду make run (для запуска всей программы).
-* 5.2.	С помощью команды: helm upgrade --install kuard ./kuard-0.1.0.tgz --set tag=0.1.1 --set ip_ssh="mZsRGR…=" --set config="VDI4e…=" --set schedule="22 * * * *". 
+5.	Запустить программу. Она автоматическиу становит все необходимые зависисмости и запсутит код:
+```
+chmod +x run.sh
+./run.sh
+```
 
 >В случае проблем с открытием кода можно обратиться к https://github.com/NagapetyanMargarita/Minikube_plugin
 
