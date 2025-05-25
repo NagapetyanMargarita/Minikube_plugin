@@ -1,6 +1,8 @@
+import paramiko
 import json
 import logging
 import os
+import sys
 import base64
 from kubernetes import client, config
 from kubernetes.client import V1Node, V1Pod
@@ -9,7 +11,7 @@ from typing import Union
 from paramiko.client import SSHClient, AutoAddPolicy
 
 from kuard.alerts import notify
-from kuard.class_types import Pod, Container, Metrics
+from kuard.class_types import Pod, Container, Metrics, Trivy_metrics
 
 config.load_kube_config()
 v1 = client.CoreV1Api()
@@ -43,7 +45,8 @@ def get_pods(node: V1Node):
         )
 
     # здесь можно запрашивать по всем именам и парсить, потом переделаем
-    pods = v1.list_pod_for_all_namespaces(field_selector=f"spec.nodeName={node.metadata.name}").items
+    pods = v1.list_pod_for_all_namespaces(field_selector="metadata.namespace!=kube-system").items
+    #pods = v1.list_pod_for_all_namespaces(field_selector=f"spec.nodeName={node.metadata.name}").items
     return [collect_pod_info(pod) for pod in pods]
 
 
@@ -59,6 +62,7 @@ def get_ssh_to_node(ip: str, private_key_str: str) -> SSHClient:
     with tempfile.NamedTemporaryFile(delete=False) as key_file:
         key_file.write(private_key_str.encode())
         private_key_path = key_file.name
+
     ssh.connect(ip, username='docker', key_filename=private_key_path)
     return ssh
 
@@ -73,12 +77,60 @@ def collect_metrics(ssh: SSHClient, inspect) -> Metrics:
         except ValueError:
             return str(output.rstrip('%\n'))
 
+    def trivy_json(ssh: SSHClient, image_name: str) -> Trivy_metrics:
+        command = f"trivy image --quiet --format json {image_name}"
+        stdin, stdout, stderr = ssh.exec_command(command)
+        output = stdout.read().decode("utf-8")
+        try:
+            trivy_res=json.loads(output)
+            results = trivy_res.get("Results", [])
+        except json.JSONDecodeError:
+            return {"error": "Trivy returned invalid JSON", "raw_output": output}
+
+        severity_order = ["UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        min_severity = "MEDIUM"
+        threshold_index = severity_order.index(min_severity.upper())
+        trivy_dict={}
+        vuln_ids = []
+        refs = []
+
+        for target in results:
+            for vuln in target.get("Vulnerabilities", []):
+                if severity_order.index(vuln.get("Severity", "UNKNOWN")) >= threshold_index:
+                    vuln_ids.append(vuln.get("VulnerabilityID", ""))
+                    if not trivy_dict.get("Title"):
+                        trivy_dict["Title"] = vuln.get("Title", "")
+                    if not trivy_dict.get("Description"):
+                        trivy_dict["Description"] = vuln.get("Description", "")
+                    refs.extend(vuln.get("References", []))
+
+        trivy_dict["VulnerabilityID"] = vuln_ids
+        trivy_dict["References"] = refs
+
+        if not trivy_dict["VulnerabilityID"]:
+            return None
+
+        #print(trivy_dict["VulnerabilityID"])
+        #print()
+        print(json.dumps(trivy_dict, indent=2, ensure_ascii=False))
+        return trivy_dict
+
+
     result = {}
     result["files_count"] = get_metrics(ssh, f"sudo su -c 'find {inspect[0]['GraphDriver']['Data']['UpperDir']} -type d -o -type f | wc -l'")
     result["memory"] = get_metrics(ssh, f"docker stats --no-stream --format '{{{{.MemUsage}}}}' {inspect[0]['Id']}")
     result["CPU"] = get_metrics(ssh, f"docker stats --no-stream --format '{{{{.CPUPerc}}}}' {inspect[0]['Id']}")
     result["file_SUID"] = get_metrics(ssh, f"sudo su -c 'find {inspect[0]['GraphDriver']['Data']['UpperDir']} -type f -perm /4000'")
     result["files_executable"] = get_metrics(ssh, f"sudo su -c 'find {inspect[0]['GraphDriver']['Data']['UpperDir']} -type f -executable" )
+
+    #Check network
+    result["port"] = get_metrics(ssh, f"sudo nsenter -t $(docker inspect -f '{{{{.State.Pid}}}}' {inspect[0]['Id']}) -n ss -tuln | awk '{{{{print $5}}}}' | grep -oE '[0-9]+$' | sort -n | uniq")
+    result["count_dns"] = get_metrics(ssh, f"sudo nsenter -t $(docker inspect -f '{{{{.State.Pid}}}}' {inspect[0]['Id']}) -n conntrack -L -p udp --dport=53 | wc -l")
+    #print(result["count_dns"])
+
+    #Check trivy
+    if value == 'true':
+      result["trivy"]=trivy_json(ssh, inspect[0]['Config']['Image'])
     return result
 
 
@@ -95,6 +147,12 @@ def check_rules(container: Container):
 
 
 if __name__ == "__main__":
+    args = sys.argv
+    if len(args) > 1:
+        value = args[1]  # Первый переданный аргумент
+        print("Переданное значение:", value)
+    else:
+        print("Значение не передано")
     nodes = get_nodes()
     logger.info("We have %s nodes", len(nodes))
     state = {get_ip(node): get_pods(node) for node in nodes}
@@ -110,6 +168,7 @@ if __name__ == "__main__":
                 stdin, stdout, stderr = ssh.exec_command(f"docker inspect {container['id']}")
                 output = stdout.read().decode('utf-8')
                 container["inspect"] = json.loads(output)
+                print(container["name"])
                 container["metrics"] = collect_metrics(ssh, container["inspect"])
                 #check_rules(container)
 
