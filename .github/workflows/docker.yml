@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ lower(github.repository) }}
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build_and_push:
@@ -30,9 +30,11 @@ jobs:
         id: vars
         run: |
           VERSION=${GITHUB_SHA::8}
+          REPO_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag_latest=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_OUTPUT
+          echo "tag=${{ env.REGISTRY }}/$REPO_NAME:${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag_latest=${{ env.REGISTRY }}/$REPO_NAME:latest" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
