@@ -3,6 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [ master ]
+    tags: [ 'v*' ]
 
 env:
   REGISTRY: ghcr.io
@@ -26,21 +27,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set image tag
+      - name: Set image tags
         id: vars
         run: |
-          VERSION=${GITHUB_SHA::8}
           REPO_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          SHORT_SHA=${GITHUB_SHA::8}
+
+          EXTRA_TAGS=""
+          if [[ ${{ github.ref }} == refs/tags/* ]]; then
+            TAG_VERSION=${GITHUB_REF#refs/tags/v}
+            EXTRA_TAGS="${{ env.REGISTRY }}/$REPO_NAME:$TAG_VERSION,"
+          fi
+          
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_OUTPUT
-          echo "tag=${{ env.REGISTRY }}/$REPO_NAME:${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag_latest=${{ env.REGISTRY }}/$REPO_NAME:latest" >> $GITHUB_OUTPUT
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "tags=$EXTRA_TAGS${{ env.REGISTRY }}/$REPO_NAME:$SHORT_SHA,${{ env.REGISTRY }}/$REPO_NAME:latest" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: |
-            ${{ steps.vars.outputs.tag }}
-            ${{ steps.vars.outputs.tag_latest }}
+          tags: ${{ steps.vars.outputs.tags }}

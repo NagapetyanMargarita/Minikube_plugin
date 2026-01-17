@@ -1,0 +1,65 @@
+name: Publish Helm Chart by Tag
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+env:
+  REGISTRY: ghcr.io
+  CHART_NAME: kuard
+
+jobs:
+  package-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Configure OCI registry
+        run: |
+          # Логинимся в GHCR для Helm
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} \
+            --username ${{ github.actor }} \
+            --password-stdin
+
+      - name: Extract version from tag
+        id: tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          
+          echo "Версия из тега: $VERSION"
+
+      - name: Update Chart.yaml version only
+        run: |
+          sed -i "s|^version: .*|version: \"${{ steps.tag.outputs.VERSION }}\"|" ./helm/Chart.yaml
+          
+          echo "Обновленный Chart.yaml:"
+          cat ./helm/Chart.yaml
+
+      - name: Package Helm chart
+        run: |
+          helm package ./helm --version ${{ steps.tag.outputs.VERSION }}
+          CHART_FILE=$(ls *.tgz)
+          echo "CHART_FILE=$CHART_FILE" >> $GITHUB_ENV
+          
+          echo "Создан чарт: $CHART_FILE"
+
+      - name: Push to OCI registry
+        run: |
+          echo "Публикую чарт: ${{ env.CHART_FILE }}"
+          helm push ${{ env.CHART_FILE }} oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+          
+          echo "Чарт опубликован:"
+          echo "oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ env.CHART_NAME }}:${{ steps.tag.outputs.VERSION }}"
