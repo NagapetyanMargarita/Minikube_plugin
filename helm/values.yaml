@@ -1,0 +1,5 @@
+schedule: "10 * * * *"
+image: "ghcr.io/nagapetyanmargarita/minikube_plugin"
+tag: "latest"
+ip_ssh: ""
+config: ""
