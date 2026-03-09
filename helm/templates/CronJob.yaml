@@ -14,7 +14,7 @@ spec:
                 secretName: kuard-cluster-config
           containers:
           - name: kuard
-            image: {{ .Values.image }}:{{ .Values.tag }}
+            image: {{ .Values.image }}:{{ .Values.tag | default .Chart.AppVersion }}
             env:
               - name: IP_SSH
                 value: {{ .Values.ip_ssh }}

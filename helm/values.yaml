@@ -1,5 +1,5 @@
 schedule: "10 * * * *"
 image: "ghcr.io/nagapetyanmargarita/minikube_plugin"
-tag: "latest"
+tag: ""
 ip_ssh: ""
 config: ""

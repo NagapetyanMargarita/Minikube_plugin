@@ -2,7 +2,6 @@ name: Publish Helm Chart by Tag
 
 on:
   push:
-    branches: [ master ]
     tags: [ 'v*' ]
 
 env:
@@ -47,6 +46,7 @@ jobs:
       - name: Update Chart.yaml version only
         run: |
           sed -i "s|^version: .*|version: \"${{ steps.tag.outputs.VERSION }}\"|" ./helm/Chart.yaml
+          sed -i "s|^appVersion: .*|appVersion: \"${{ steps.tag.outputs.VERSION }}\"|" ./helm/Chart.yaml
           
           echo "Обновленный Chart.yaml:"
           cat ./helm/Chart.yaml
