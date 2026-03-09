@@ -62,7 +62,8 @@ jobs:
       - name: Push to OCI registry
         run: |
           echo "Публикую чарт: ${{ env.CHART_FILE }}"
-          helm push ${{ env.CHART_FILE }} oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+          REPO_USER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm push ${{ env.CHART_FILE }} oci://${{ env.REGISTRY }}/$REPO_USER/charts
           
           echo "Чарт опубликован:"
-          echo "oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ env.CHART_NAME }}:${{ steps.tag.outputs.VERSION }}"
+          echo "oci://${{ env.REGISTRY }}/$REPO_USER/charts/${{ env.CHART_NAME }}:${{ steps.tag.outputs.VERSION }}"
