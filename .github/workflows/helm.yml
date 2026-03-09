@@ -2,6 +2,7 @@ name: Publish Helm Chart by Tag
 
 on:
   push:
+    branches: [ master ]
     tags: [ 'v*' ]
 
 env:
@@ -25,6 +26,8 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: 'latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure OCI registry
         run: |
